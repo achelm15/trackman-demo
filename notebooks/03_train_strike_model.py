@@ -7,8 +7,9 @@
 # MAGIC
 # MAGIC - Data: `trackman_silver`, filtered to called pitches (`StrikeCalled`, `BallCalled`, `BallinDirt`).
 # MAGIC - Tuning: Optuna, with each trial a nested MLflow run.
-# MAGIC - Every run logs a calibration plot and a SHAP beeswarm plot (matplotlib).
-# MAGIC - Best params are retrained and registered to Unity Catalog with the `@prod` alias.
+# MAGIC - Every run logs a calibration plot, a SHAP beeswarm plot, and a strike-zone heatmap.
+# MAGIC - Best params are retrained and registered to Unity Catalog. The new version gets the
+# MAGIC   `@challenger` alias by default; review it, then promote to `@prod` manually.
 
 # COMMAND ----------
 
@@ -23,12 +24,14 @@ dbutils.widgets.text("schema", "trackman", "Schema")
 dbutils.widgets.text("silver_table", "trackman_silver", "Silver table")
 dbutils.widgets.text("model_name", "strike_predictor", "Registered model name")
 dbutils.widgets.text("n_trials", "30", "Optuna trials")
+dbutils.widgets.text("alias", "challenger", "Alias to assign the new version")
 
 CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 SILVER_TABLE = dbutils.widgets.get("silver_table")
 MODEL_NAME = dbutils.widgets.get("model_name")
 N_TRIALS = int(dbutils.widgets.get("n_trials"))
+ALIAS = dbutils.widgets.get("alias")
 
 FULL_TABLE = f"{CATALOG}.{SCHEMA}.{SILVER_TABLE}"
 FULL_MODEL = f"{CATALOG}.{SCHEMA}.{MODEL_NAME}"
@@ -103,6 +106,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import shap
 from sklearn.calibration import calibration_curve
 import mlflow
@@ -146,6 +150,39 @@ def log_shap_beeswarm(model, X_eval):
     ]
     mlflow.log_text("\n".join(lines), "plots/shap_importance.csv")
 
+
+def log_strike_zone_heatmap(model, X_ref, n=60):
+    """Predicted strike probability across the plate, other features held at their median.
+
+    A partial-dependence view over plate_loc_side x plate_loc_height that shows the strike
+    zone the model learned. The dashed box is the nominal rulebook zone for reference.
+    """
+    side = np.linspace(-2.0, 2.0, n)   # horizontal, feet (catcher's view)
+    height = np.linspace(0.5, 4.5, n)  # vertical, feet above the plate
+    ss, hh = np.meshgrid(side, height)
+
+    medians = X_ref.median()
+    grid = pd.DataFrame({c: np.full(ss.size, medians[c]) for c in FEATURES})
+    grid["plate_loc_side"] = ss.ravel()
+    grid["plate_loc_height"] = hh.ravel()
+    grid = grid[FEATURES]  # preserve training column order
+
+    prob = model.predict_proba(grid)[:, 1].reshape(ss.shape)
+
+    fig, ax = plt.subplots(figsize=(6, 7))
+    mesh = ax.pcolormesh(ss, hh, prob, shading="auto", cmap="viridis", vmin=0, vmax=1)
+    fig.colorbar(mesh, ax=ax, label="P(called strike)")
+    # Nominal zone: plate is 17 in wide (+/- 0.71 ft), strike zone roughly 1.5-3.5 ft high
+    ax.add_patch(plt.Rectangle((-0.71, 1.5), 1.42, 2.0, fill=False,
+                               edgecolor="white", lw=1.5, ls="--"))
+    ax.set_xlabel("Horizontal location (ft, catcher's view)")
+    ax.set_ylabel("Height above plate (ft)")
+    ax.set_title("Called-strike probability by location")
+    ax.set_aspect("equal")
+    fig.tight_layout()
+    mlflow.log_figure(fig, "plots/strike_zone_heatmap.png")
+    plt.close(fig)
+
 # COMMAND ----------
 # MAGIC %md
 # MAGIC ## Hyperparameter tuning with Optuna
@@ -176,6 +213,7 @@ def evaluate_and_log(model):
     mlflow.log_metrics(metrics)
     log_calibration_plot(model, X_test, y_test)
     log_shap_beeswarm(model, X_test)
+    log_strike_zone_heatmap(model, X_train)
     return metrics
 
 
@@ -242,9 +280,12 @@ with mlflow.start_run(run_name="best") as best_run:
     )
 
 client = MlflowClient(registry_uri="databricks-uc")
-client.set_registered_model_alias(FULL_MODEL, "prod", info.registered_model_version)
-print(f"Registered {FULL_MODEL} v{info.registered_model_version} as @prod")
+client.set_registered_model_alias(FULL_MODEL, ALIAS, info.registered_model_version)
+print(f"Registered {FULL_MODEL} v{info.registered_model_version} as @{ALIAS}")
 print("Test metrics:", metrics)
+if ALIAS != "prod":
+    print(f"Review this version, then promote with: "
+          f"client.set_registered_model_alias('{FULL_MODEL}', 'prod', {info.registered_model_version})")
 
 # COMMAND ----------
 
@@ -252,6 +293,7 @@ import json
 dbutils.notebook.exit(json.dumps({
     "model": FULL_MODEL,
     "model_version": info.registered_model_version,
+    "alias": ALIAS,
     "best_test_auc": study.best_value,
     "test_metrics": metrics,
     "n_rows": len(pdf),

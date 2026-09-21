@@ -44,7 +44,8 @@ resources:
             left: "{{tasks.check_model.values.model_exists}}"
             right: "true"
 
-        # Model missing -> train it first
+        # Model missing -> bootstrap one. alias=prod so the downstream score step has a model
+        # to load; manual retraining (trackman_train) produces a @challenger instead.
         - task_key: train_strike_model
           depends_on:
             - task_key: model_exists_gate
@@ -57,6 +58,7 @@ resources:
               silver_table: trackman_silver
               model_name: strike_predictor
               n_trials: "30"
+              alias: prod
 
         # Score either way: after training (model was missing) OR straight from the gate (model existed).
         # AT_LEAST_ONE_SUCCESS runs it whichever branch fired (the other is skipped).
@@ -72,5 +74,6 @@ resources:
               catalog: ${var.catalog}
               schema: trackman
               silver_table: trackman_silver
+              volume: raw_trackman_data
               model_name: strike_predictor
               gold_table: gold_strike_predictions

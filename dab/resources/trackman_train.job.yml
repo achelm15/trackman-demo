@@ -12,3 +12,5 @@ resources:
               silver_table: trackman_silver
               model_name: strike_predictor
               n_trials: "30"
+              # New version is registered as @challenger; review, then promote to @prod manually
+              alias: challenger

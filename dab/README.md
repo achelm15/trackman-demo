@@ -29,8 +29,11 @@ strike model exists: if so it scores directly, and if not it trains one first, t
 scores. The branch uses a condition task, so the pipeline is self-sufficient on a cold
 start.
 
-`trackman_train` retrains on demand. It repoints `@prod` at the new version, which the
-ingest job then picks up on its next run.
+`trackman_train` retrains on demand. It registers the new version as `@challenger`; review
+it, then promote to `@prod` manually (`client.set_registered_model_alias(...)` or the UI). The
+ingest job scores with `@prod`, so a challenger has no effect until you promote it. On a cold
+start, the ingest branch instead registers its bootstrap model directly as `@prod` so scoring
+has something to load.
 
 ## Setup
 
@@ -56,7 +59,7 @@ databricks bundle deploy
 databricks fs cp ../Track_Combo.csv \
   "dbfs:/Volumes/main/trackman/raw_trackman_data/Track_Combo.csv"
 
-# 3. Run the pipeline (trains a model on the first run, scores every run)
+# 3. Run the pipeline (trains a model on the first run, scores new pitches every run)
 databricks bundle run trackman_ingest
 
 # Retrain on demand

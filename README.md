@@ -7,6 +7,12 @@ The data comes from optical tracking of college baseball scrimmages: one row per
 with plate location, velocity, spin, movement, and hit metrics. A sample file,
 `Track_Combo.csv`, is at the repo root.
 
+## Data source
+
+`Track_Combo.csv` is from the optical tracking dataset published on Mendeley Data:
+https://data.mendeley.com/datasets/xfnz6mkdzm/3 (DOI: 10.17632/xfnz6mkdzm.3). Check the
+dataset's license there before redistributing it.
+
 ## Two ways to run it
 
 - [`dab/`](dab/) — a Databricks Asset Bundle. Deploys the schema, volume, and jobs, and
@@ -25,9 +31,10 @@ has its own README with instructions.
    column.
 2. Silver: casts the pitch and hit fields into a typed table, upserting with MERGE.
 3. Model: XGBoost tuned with Optuna predicts called strike vs. ball, tracked in MLflow.
-   Each run logs a calibration plot and a SHAP beeswarm plot; the best model registers to
-   Unity Catalog under `@prod`.
-4. Scoring: scores every silver pitch with the `@prod` model into a gold table.
+   Each run logs a calibration plot, a SHAP beeswarm plot, and a strike-zone heatmap. The best
+   model registers to Unity Catalog as `@challenger`; review it, then promote to `@prod`.
+4. Scoring: incrementally scores new silver pitches with the `@prod` model, upserting into a
+   gold table (streaming read from silver with a checkpoint).
 
 "Strike or ball" means the umpire's call on a taken pitch. Swinging strikes, fouls, and
 balls in play are excluded, since those are not called balls or strikes.

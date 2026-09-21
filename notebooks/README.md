@@ -11,8 +11,9 @@ Run them in order:
 1. `00_setup.py` — creates the `trackman` schema and `raw_trackman_data` volume.
 2. `01_ingest_to_bronze.py` — Auto Loader reads the CSV into a `VARIANT` bronze table.
 3. `02_transform_to_silver.py` — casts the fields into a typed silver table.
-4. `03_train_strike_model.py` — XGBoost + Optuna, logs plots to MLflow, registers `@prod`.
-5. `04_score_to_gold.py` — scores silver pitches with the `@prod` model into a gold table.
+4. `03_train_strike_model.py` — XGBoost + Optuna, logs plots to MLflow, registers `@challenger`.
+5. `04_score_to_gold.py` — incrementally scores new silver pitches with the `@prod` model,
+   upserting into a gold table (streaming read from silver with a checkpoint).
 
 Each notebook takes catalog/schema/table names as widgets, defaulting to `main` /
 `trackman`. Change the widgets to target a different catalog.
@@ -28,10 +29,14 @@ Each notebook takes catalog/schema/table names as widgets, defaulting to `main` 
      "dbfs:/Volumes/main/trackman/raw_trackman_data/Track_Combo.csv"
    ```
 4. Run `01` and `02` to build bronze and silver.
-5. Run `03` to train and register the model, then `04` to score.
+5. Run `03` to train. It registers the best version as `@challenger`. Review it, then promote
+   to `@prod` (run `alias=prod`, use the printed `set_registered_model_alias(...)` call, or the
+   UI). `04` loads `@prod`, so it needs a promoted model.
+6. Run `04` to score.
 
-Re-run `03` whenever you want to retrain; it repoints `@prod`, and the next `04` run picks
-it up.
+Re-run `03` whenever you want to retrain; it registers a new `@challenger`, which has no effect
+until you promote it. `04` scores incrementally, so a promoted model only applies to pitches
+added after it. To re-score history, delete the gold checkpoint and table, then rerun `04`.
 
 ## Notes
 
