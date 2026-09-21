@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    trackman:
+      catalog_name: ${var.catalog}
+      name: trackman
+      comment: 'Schema for TrackMan data'

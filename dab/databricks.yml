@@ -1,0 +1,16 @@
+bundle:
+  name: trackman_setup
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: 'Unity Catalog to create the trackman schema and volume in'
+    default: 'main'
+
+targets:
+  default:
+    default: true
+    workspace:
+      profile: DEFAULT

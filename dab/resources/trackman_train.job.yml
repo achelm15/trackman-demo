@@ -1,0 +1,14 @@
+resources:
+  jobs:
+    trackman_train:
+      name: trackman_train
+      tasks:
+        - task_key: train_strike_model
+          notebook_task:
+            notebook_path: ../src/train_strike_model.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              silver_table: trackman_silver
+              model_name: strike_predictor
+              n_trials: "30"

@@ -1,0 +1,76 @@
+resources:
+  jobs:
+    trackman_ingest:
+      name: trackman_ingest
+      tasks:
+        - task_key: ingest_to_bronze
+          notebook_task:
+            notebook_path: ../src/ingest_to_bronze.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              volume: raw_trackman_data
+              bronze_table: trackman_bronze
+
+        - task_key: transform_to_silver
+          depends_on:
+            - task_key: ingest_to_bronze
+          notebook_task:
+            notebook_path: ../src/transform_to_silver.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              volume: raw_trackman_data
+              bronze_table: trackman_bronze
+              silver_table: trackman_silver
+
+        # Is there already a @prod strike model?
+        - task_key: check_model
+          depends_on:
+            - task_key: transform_to_silver
+          notebook_task:
+            notebook_path: ../src/check_model.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              model_name: strike_predictor
+
+        # Branch on the answer
+        - task_key: model_exists_gate
+          depends_on:
+            - task_key: check_model
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.check_model.values.model_exists}}"
+            right: "true"
+
+        # Model missing -> train it first
+        - task_key: train_strike_model
+          depends_on:
+            - task_key: model_exists_gate
+              outcome: "false"
+          notebook_task:
+            notebook_path: ../src/train_strike_model.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              silver_table: trackman_silver
+              model_name: strike_predictor
+              n_trials: "30"
+
+        # Score either way: after training (model was missing) OR straight from the gate (model existed).
+        # AT_LEAST_ONE_SUCCESS runs it whichever branch fired (the other is skipped).
+        - task_key: score_to_gold
+          depends_on:
+            - task_key: model_exists_gate
+              outcome: "true"
+            - task_key: train_strike_model
+          run_if: AT_LEAST_ONE_SUCCESS
+          notebook_task:
+            notebook_path: ../src/score_to_gold.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: trackman
+              silver_table: trackman_silver
+              model_name: strike_predictor
+              gold_table: gold_strike_predictions

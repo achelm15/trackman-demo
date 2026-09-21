@@ -1,0 +1,11 @@
+# Databricks bundle deploy state (workspace/user-specific)
+.databricks/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
