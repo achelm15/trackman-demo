@@ -9,9 +9,13 @@ with plate location, velocity, spin, movement, and hit metrics. A sample file,
 
 ## Data source
 
-`Track_Combo.csv` is from the optical tracking dataset published on Mendeley Data:
-https://data.mendeley.com/datasets/xfnz6mkdzm/3 (DOI: 10.17632/xfnz6mkdzm.3). Check the
-dataset's license there before redistributing it.
+`Track_Combo.csv` is from:
+
+Pifer, Nathan David (2024), "Optical Tracking Data from College Baseball Scrimmages",
+Mendeley Data, V3. DOI: [10.17632/xfnz6mkdzm.3](https://doi.org/10.17632/xfnz6mkdzm.3)
+
+Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The CSV is included
+here unmodified; the notebooks transform it into bronze, silver, and gold tables.
 
 ## Two ways to run it
 
